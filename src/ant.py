@@ -4,25 +4,29 @@ import numpy as np
 from PIL import Image, ImageTk
 from tkinter.colorchooser import *
 
+
 class ClassicAnt:
 
-    def __init__(self, size):
-        self.board = np.full((size, size), False, dtype=bool)  # False=white
+    def __init__(self, size, left_turn=(0, 1)):
+        self.board = np.full((size, size), 0, dtype=np.uint8)   # 0- first color
         self.board_size = size
         self.direction = 0                                  # 0,1,2,3- right,up,left,down
         self.position = [size//2]*2
         self.iteration = 0
+        self.left_turn = left_turn
+        self.number_of_colors = len(left_turn)
 
     def make_move(self):
         self.iteration += 1
 
-        if not self.board[self.position[0], self.position[1]]:
+        if self.left_turn[self.board[self.position[0], self.position[1]]]:
             self.direction = (self.direction+1) % 4
         else:
             self.direction = (self.direction-1) % 4
 
-        self.board[self.position[0], self.position[1]] = not self.board[self.position[0], self.position[1]]
-
+        # print(self.board[self.position[0], self.position[1]])
+        self.board[self.position[0], self.position[1]] = (self.board[self.position[0], self.position[1]]+1) % self.number_of_colors
+        # print(self.board[self.position[0], self.position[1]])
         if self.direction == 0:
             self.position[0] += 1
         elif self.direction == 1:
@@ -34,7 +38,7 @@ class ClassicAnt:
 
         if not ((0 <= self.position[0] < self.board_size) and (0 <= self.position[1] < self.board_size)):
             new_size = self.board_size*2+1
-            new_board = np.full((new_size, new_size), False, dtype=bool)
+            new_board = np.full((new_size, new_size), False, dtype=np.uint8)
             center = new_size/2
             lower_b = center-self.board_size/2
             upper_b = center+self.board_size/2
@@ -53,11 +57,12 @@ class AntGUI(tk.Tk):
         super().__init__()
         self.state("zoomed")
 
-        self.directions = []
+        self.directions = [0, 1]
         self._colors = []
         self.color_buttons = []
         self.repeat_step = tk.IntVar()
         self.repeat_delay = tk.IntVar()
+        self.number_of_colors = 2
 
         self.colors = [(255, 255, 255), (0, 0, 0)]
         self.ant = ClassicAnt(1)
@@ -72,9 +77,9 @@ class AntGUI(tk.Tk):
 
         self.single_step_button = tk.Button(self.bottom_options_frame, text="Single step", command=self.single_step, font=("Courier", 44))
         self.multi_step_button = tk.Button(self.bottom_options_frame, text="Multi step", command=self.multi_step, font=("Courier", 44))
-        self.step_number = tk.Entry(self.bottom_options_frame, width=5, font=("Courier", 44), justify=tk.CENTER)
+        self.step_number = tk.Entry(self.bottom_options_frame, width=7, font=("Courier", 44), justify=tk.CENTER)
         self.repeat_checkbox = tk.Checkbutton(self.bottom_options_frame, variable=self.repeat_step, command=self.continuous_step, text="Step continuously?")
-        self.reset_button = tk.Button(self.bottom_options_frame, text="Reset", command=lambda: reset(self), font=("Courier", 44))
+        self.reset_button = tk.Button(self.bottom_options_frame, text="Reset", command=self.reset, font=("Courier", 44))
         self.repeat_delay_slider = tk.Scale(self.bottom_options_frame, from_=50, to=1000, orient=tk.HORIZONTAL, variable=self.repeat_delay)
 
         self.color_label = tk.Label(self.top_options_frame, text="Number of colors", font=("Courier", 44))
@@ -144,23 +149,36 @@ class AntGUI(tk.Tk):
                 child.destroy()
 
         number_of_colors = int(self.color_number_entry.get())
+        self.number_of_colors = number_of_colors
         self.directions = [tk.IntVar() for x in range(number_of_colors)]
         self._colors = ["white" for x in range(number_of_colors)]
+        self.colors = [(0, 0, 0)] * self.number_of_colors
         self.color_buttons = []
-        set_colors_array = [lambda: self.set_color(x) for x in range(number_of_colors)]
+
         for num in range(number_of_colors):
             self.top_options_frame.rowconfigure(1+num, pad=3)
-            label = tk.Label(self.top_options_frame, text="Color #%d" % (num+1), font=("Courier", 44))
+            label = tk.Label(self.top_options_frame, text="Color #%d" % (num+1), font=("Courier", 20))
             action = tk.Checkbutton(self.top_options_frame, variable=self.directions[num])
-            self.color_buttons.append(tk.Button(self.top_options_frame, width=5, height=2, name=str(num), command=set_colors_array[num]))
+            color = tk.Button(self.top_options_frame, width=5, height=2, name=str(num))
+
+            color.configure(command=lambda x=num: self.set_color(x))
             label.grid(row=num+1, column=0)
             action.grid(row=num+1, column=1)
-            self.color_buttons[num].grid(row=num+1, column=2)
+            color.grid(row=num+1, column=2)
+
+            self.color_buttons.append(color)
+        self.reset()
 
     def set_color(self, button_number):
         color = askcolor()
         self.color_buttons[button_number].configure(bg=color[1])
         self._colors[button_number] = color[1]
+        self.colors[button_number] = tuple(int(x) for x in color[0])
+        print("Set color number %d to %s" % (button_number, self.colors[button_number]))
+
+    def reset(self):
+        self.ant = ClassicAnt(1, [x.get() for x in self.directions])
+        self.current_image = tk.PhotoImage(translate_array_to_image(self.ant.board, self.colors))
 
 
 def translate_array_to_image(array, colors):
